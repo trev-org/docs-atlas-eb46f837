@@ -1,0 +1,265 @@
+---
+title: DeleteReachableFiles Action
+description: API reference for the DeleteReachableFiles action that deletes all files referenced by a table metadata file
+---
+
+# DeleteReachableFiles
+
+The `DeleteReachableFiles` action deletes all files referenced by a table metadata file. This action is used to completely clean up table storage after a table is dropped and no longer needed.
+
+## Interface
+
+```java
+public interface DeleteReachableFiles extends Action<DeleteReachableFiles, DeleteReachableFiles.Result>
+```
+
+## Overview
+
+When a table is dropped, its metadata is removed from the catalog, but the underlying data files remain in storage. This action provides a way to irreversibly delete all reachable files including:
+- Data files
+- Delete files (both equality and position deletes)
+- Manifest files
+- Manifest list files
+- Metadata JSON files
+- Version hint files
+
+<Warning>
+This action permanently deletes files and cannot be undone. Use with extreme caution and only after confirming the table is no longer needed.
+</Warning>
+
+## Methods
+
+### deleteWith
+
+Provides a custom delete function for file removal.
+
+```java
+DeleteReachableFiles deleteWith(Consumer<String> deleteFunc)
+```
+
+**Parameters:**
+- `deleteFunc` - A function that accepts a file path and performs the deletion
+
+**Returns:** `this` for method chaining
+
+**Example:**
+```java
+action.deleteWith(path -> {
+  System.out.println("Deleting: " + path);
+  // Custom deletion logic
+});
+```
+
+### executeDeleteWith
+
+Provides an executor service for parallel file deletion.
+
+```java
+DeleteReachableFiles executeDeleteWith(ExecutorService executorService)
+```
+
+**Parameters:**
+- `executorService` - The executor service to use for parallel deletes
+
+**Returns:** `this` for method chaining
+
+<Note>
+This executor service is only used if a custom delete function is provided via `deleteWith()` or if the FileIO doesn't support bulk operations. Otherwise, parallelism is controlled by the FileIO's bulk delete implementation.
+</Note>
+
+### io
+
+Sets the FileIO to use for file removal.
+
+```java
+DeleteReachableFiles io(FileIO io)
+```
+
+**Parameters:**
+- `io` - The FileIO instance to use for file operations
+
+**Returns:** `this` for method chaining
+
+**Example:**
+```java
+FileIO customIO = new CustomFileIO();
+action.io(customIO);
+```
+
+## Result
+
+The `Result` interface provides statistics about the deletion operation.
+
+### Methods
+
+```java
+interface Result {
+  long deletedDataFilesCount();
+  long deletedEqualityDeleteFilesCount();
+  long deletedPositionDeleteFilesCount();
+  long deletedManifestsCount();
+  long deletedManifestListsCount();
+  long deletedOtherFilesCount();
+}
+```
+
+#### deletedDataFilesCount
+
+Returns the number of deleted data files.
+
+#### deletedEqualityDeleteFilesCount
+
+Returns the number of deleted equality delete files.
+
+#### deletedPositionDeleteFilesCount
+
+Returns the number of deleted position delete files.
+
+#### deletedManifestsCount
+
+Returns the number of deleted manifest files.
+
+#### deletedManifestListsCount
+
+Returns the number of deleted manifest list files.
+
+#### deletedOtherFilesCount
+
+Returns the number of deleted metadata JSON and version hint files.
+
+## Usage Examples
+
+### Basic Table Cleanup
+
+```java
+// Delete all files for a dropped table
+String metadataFile = "s3://bucket/warehouse/db/table/metadata/v1.metadata.json";
+
+DeleteReachableFiles.Result result = actions
+  .deleteReachableFiles(metadataFile)
+  .execute();
+
+System.out.println("Deletion Summary:");
+System.out.println("  Data files: " + result.deletedDataFilesCount());
+System.out.println("  Delete files: " + 
+  (result.deletedEqualityDeleteFilesCount() + result.deletedPositionDeleteFilesCount()));
+System.out.println("  Manifests: " + result.deletedManifestsCount());
+System.out.println("  Manifest lists: " + result.deletedManifestListsCount());
+System.out.println("  Other files: " + result.deletedOtherFilesCount());
+```
+
+### With Custom Delete Function
+
+```java
+// Use custom deletion logic with logging
+DeleteReachableFiles.Result result = actions
+  .deleteReachableFiles(metadataFile)
+  .deleteWith(path -> {
+    System.out.println("Deleting: " + path);
+    // Perform deletion
+    fs.delete(new Path(path), false);
+  })
+  .execute();
+
+System.out.println("Deleted " + result.deletedDataFilesCount() + " data files");
+```
+
+### With Parallel Execution
+
+```java
+// Use executor service for parallel deletion
+ExecutorService executor = Executors.newFixedThreadPool(10);
+
+try {
+  DeleteReachableFiles.Result result = actions
+    .deleteReachableFiles(metadataFile)
+    .deleteWith(path -> {
+      // Custom delete logic
+      deleteFile(path);
+    })
+    .executeDeleteWith(executor)
+    .execute();
+
+  long totalFiles = result.deletedDataFilesCount() +
+                    result.deletedEqualityDeleteFilesCount() +
+                    result.deletedPositionDeleteFilesCount() +
+                    result.deletedManifestsCount() +
+                    result.deletedManifestListsCount() +
+                    result.deletedOtherFilesCount();
+
+  System.out.println("Total files deleted: " + totalFiles);
+} finally {
+  executor.shutdown();
+}
+```
+
+### With Custom FileIO
+
+```java
+// Use custom FileIO for deletion
+FileIO customIO = new S3FileIO();
+customIO.initialize(properties);
+
+DeleteReachableFiles.Result result = actions
+  .deleteReachableFiles(metadataFile)
+  .io(customIO)
+  .execute();
+
+System.out.println("Cleaned up table storage:");
+System.out.println("  Data: " + result.deletedDataFilesCount());
+System.out.println("  Metadata: " + result.deletedManifestsCount());
+```
+
+### Complete Cleanup with Verification
+
+```java
+// Delete all files and verify cleanup
+DeleteReachableFiles.Result result = actions
+  .deleteReachableFiles(metadataFile)
+  .execute();
+
+long totalDeleted = result.deletedDataFilesCount() +
+                    result.deletedEqualityDeleteFilesCount() +
+                    result.deletedPositionDeleteFilesCount() +
+                    result.deletedManifestsCount() +
+                    result.deletedManifestListsCount() +
+                    result.deletedOtherFilesCount();
+
+if (totalDeleted > 0) {
+  System.out.println("Successfully deleted " + totalDeleted + " files");
+  System.out.println("Storage cleanup complete");
+} else {
+  System.out.println("No files found to delete");
+}
+```
+
+## Best Practices
+
+1. **Verify before deletion**: Ensure the table is truly no longer needed before running this action
+
+2. **Check catalog state**: Confirm the table has been dropped from the catalog
+
+3. **Backup metadata**: Keep a backup of the metadata file if recovery might be needed
+
+4. **Use correct metadata file**: Point to the latest metadata file for the dropped table
+
+5. **Monitor progress**: Track deletion results to ensure all files are removed
+
+6. **Test in non-production**: Verify the action works as expected before running in production
+
+<Warning>
+This action is destructive and irreversible. There is no way to recover data after deletion. Always verify the table is no longer needed.
+</Warning>
+
+## Important Notes
+
+- **Metadata file required**: You must provide the path to a metadata file, not a table identifier
+- **All snapshots deleted**: All data from all snapshots will be removed
+- **No catalog interaction**: This action only deletes files; it does not interact with the catalog
+- **Parallel execution**: FileIOs that support bulk operations will handle parallelism automatically
+
+## Related
+
+- [DeleteOrphanFiles](/api/actions/delete-orphan-files) - Remove unreferenced orphan files
+- [ExpireSnapshots](/api/actions/expire-snapshots) - Remove old snapshots while keeping the table
+- [RemoveDanglingDeleteFiles](/api/actions/remove-dangling-delete-files) - Remove obsolete delete files

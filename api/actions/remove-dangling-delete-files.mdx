@@ -1,0 +1,239 @@
+---
+title: RemoveDanglingDeleteFiles Action
+description: API reference for the RemoveDanglingDeleteFiles action that removes delete files no longer applicable to live data
+---
+
+# RemoveDanglingDeleteFiles
+
+The `RemoveDanglingDeleteFiles` action removes dangling delete files from the current snapshot. A delete file is considered dangling if its deletes no longer apply to any live data files.
+
+## Interface
+
+```java
+public interface RemoveDanglingDeleteFiles extends Action<RemoveDanglingDeleteFiles, RemoveDanglingDeleteFiles.Result>
+```
+
+## Overview
+
+Delete files (both position and equality deletes) reference specific data files. When data files are removed through operations like:
+- Data file compaction/rewriting
+- Partition dropping
+- Data expiration
+
+The delete files may become "dangling" - they no longer apply to any data files in the current snapshot. These dangling delete files:
+- Consume storage unnecessarily
+- Add overhead to query planning
+- Provide no value since their target data is gone
+
+This action identifies and removes such dangling delete files to optimize table performance and reduce storage costs.
+
+## Methods
+
+This action has no additional configuration methods beyond the standard `execute()` method inherited from the `Action` interface.
+
+```java
+RemoveDanglingDeleteFiles.Result result = actions
+  .removeDanglingDeleteFiles(table)
+  .execute();
+```
+
+## Result
+
+The `Result` interface provides information about the removed delete files.
+
+### Methods
+
+```java
+interface Result {
+  Iterable<DeleteFile> removedDeleteFiles();
+}
+```
+
+#### removedDeleteFiles
+
+Returns an iterable collection of the delete files that were removed.
+
+**Returns:** `Iterable<DeleteFile>` - The removed delete files
+
+## Usage Examples
+
+### Basic Removal
+
+```java
+// Remove dangling delete files
+RemoveDanglingDeleteFiles.Result result = actions
+  .removeDanglingDeleteFiles(table)
+  .execute();
+
+int count = 0;
+for (DeleteFile deleteFile : result.removedDeleteFiles()) {
+  count++;
+}
+System.out.println("Removed " + count + " dangling delete files");
+```
+
+### Analyze Removed Files
+
+```java
+// Remove dangling deletes and analyze what was removed
+RemoveDanglingDeleteFiles.Result result = actions
+  .removeDanglingDeleteFiles(table)
+  .execute();
+
+long totalSize = 0;
+int equalityDeletes = 0;
+int positionDeletes = 0;
+
+for (DeleteFile deleteFile : result.removedDeleteFiles()) {
+  totalSize += deleteFile.fileSizeInBytes();
+  
+  if (deleteFile.content() == FileContent.EQUALITY_DELETES) {
+    equalityDeletes++;
+  } else if (deleteFile.content() == FileContent.POSITION_DELETES) {
+    positionDeletes++;
+  }
+}
+
+System.out.println("Removed Delete Files Summary:");
+System.out.println("  Equality deletes: " + equalityDeletes);
+System.out.println("  Position deletes: " + positionDeletes);
+System.out.println("  Total size freed: " + totalSize + " bytes");
+```
+
+### Log Removed Files
+
+```java
+// Remove dangling deletes with detailed logging
+RemoveDanglingDeleteFiles.Result result = actions
+  .removeDanglingDeleteFiles(table)
+  .execute();
+
+System.out.println("Removed dangling delete files:");
+for (DeleteFile deleteFile : result.removedDeleteFiles()) {
+  System.out.println("  " + deleteFile.path() + " (" + deleteFile.fileSizeInBytes() + " bytes)");
+}
+```
+
+### Check Before and After
+
+```java
+// Count delete files before and after
+Table table = catalog.loadTable(tableId);
+long deleteFilesBefore = StreamSupport.stream(
+  table.currentSnapshot().deleteManifests(table.io()).spliterator(), false)
+  .flatMap(manifest -> StreamSupport.stream(
+    ManifestFiles.read(manifest, table.io()).spliterator(), false))
+  .count();
+
+// Remove dangling deletes
+RemoveDanglingDeleteFiles.Result result = actions
+  .removeDanglingDeleteFiles(table)
+  .execute();
+
+// Reload and count
+table.refresh();
+long deleteFilesAfter = StreamSupport.stream(
+  table.currentSnapshot().deleteManifests(table.io()).spliterator(), false)
+  .flatMap(manifest -> StreamSupport.stream(
+    ManifestFiles.read(manifest, table.io()).spliterator(), false))
+  .count();
+
+System.out.println("Delete files before: " + deleteFilesBefore);
+System.out.println("Delete files after: " + deleteFilesAfter);
+System.out.println("Files removed: " + (deleteFilesBefore - deleteFilesAfter));
+```
+
+### Run After Compaction
+
+```java
+// Typical workflow: compact data, then remove dangling deletes
+
+// Step 1: Compact data files
+RewriteDataFiles.Result compactionResult = actions
+  .rewriteDataFiles(table)
+  .binPack()
+  .execute();
+
+System.out.println("Compaction completed: rewrote " + 
+  compactionResult.rewrittenDataFilesCount() + " files");
+
+// Step 2: Remove dangling deletes
+RemoveDanglingDeleteFiles.Result cleanupResult = actions
+  .removeDanglingDeleteFiles(table)
+  .execute();
+
+int removedCount = 0;
+for (DeleteFile df : cleanupResult.removedDeleteFiles()) {
+  removedCount++;
+}
+
+System.out.println("Cleanup completed: removed " + removedCount + " dangling delete files");
+```
+
+### Monitor Storage Savings
+
+```java
+// Calculate storage savings from removing dangling deletes
+RemoveDanglingDeleteFiles.Result result = actions
+  .removeDanglingDeleteFiles(table)
+  .execute();
+
+long bytesSaved = 0;
+int filesRemoved = 0;
+
+for (DeleteFile deleteFile : result.removedDeleteFiles()) {
+  bytesSaved += deleteFile.fileSizeInBytes();
+  filesRemoved++;
+}
+
+if (filesRemoved > 0) {
+  double mbSaved = bytesSaved / (1024.0 * 1024.0);
+  System.out.println("Storage Cleanup:");
+  System.out.println("  Files removed: " + filesRemoved);
+  System.out.println("  Space freed: " + String.format("%.2f MB", mbSaved));
+} else {
+  System.out.println("No dangling delete files found");
+}
+```
+
+## Best Practices
+
+1. **Run after data file operations**: Execute this action after data compaction, rewriting, or expiration
+
+2. **Combine with maintenance tasks**: Include in regular table maintenance workflows
+
+3. **Monitor results**: Track the number and size of removed files to understand table health
+
+4. **Schedule regularly**: Run periodically for tables with frequent delete operations
+
+5. **Run before statistics**: Remove dangling files before computing table statistics
+
+<Note>
+This action only removes delete files that are definitively dangling. It's safe to run regularly without risk of removing valid delete files.
+</Note>
+
+## When to Run This Action
+
+Run `RemoveDanglingDeleteFiles` after:
+- **Data file compaction**: When data files are rewritten or merged
+- **Partition drops**: When entire partitions are removed
+- **Data expiration**: When old data is deleted
+- **Table optimization**: As part of routine maintenance
+
+## Performance Impact
+
+- **Planning overhead reduction**: Fewer delete files means faster query planning
+- **Storage savings**: Removes unnecessary files from storage
+- **Scan performance**: Reduces metadata that needs to be processed
+- **Minimal cost**: The action itself is lightweight and metadata-focused
+
+<Warning>
+This action creates a new snapshot. Remember to expire old snapshots to fully reclaim storage.
+</Warning>
+
+## Related
+
+- [RewriteDataFiles](/api/actions/rewrite-data-files) - Compact data files (often creates dangling deletes)
+- [RewritePositionDeleteFiles](/api/actions/rewrite-position-delete-files) - Optimize position delete files
+- [ConvertEqualityDeleteFiles](/api/actions/convert-equality-delete-files) - Convert equality to position deletes
+- [ExpireSnapshots](/api/actions/expire-snapshots) - Clean up old snapshots to reclaim storage

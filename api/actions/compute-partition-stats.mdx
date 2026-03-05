@@ -1,0 +1,136 @@
+---
+title: ComputePartitionStats Action
+description: API reference for the ComputePartitionStats action that computes and writes partition statistics
+---
+
+# ComputePartitionStats
+
+The `ComputePartitionStats` action computes and writes partition statistics for an Iceberg table. This action helps optimize query planning by providing metadata about partition-level data characteristics.
+
+## Interface
+
+```java
+public interface ComputePartitionStats extends Action<ComputePartitionStats, ComputePartitionStats.Result>
+```
+
+## Overview
+
+Partition statistics provide valuable metadata that query engines can use to optimize execution plans. The action:
+- Computes statistics for partitions in a table snapshot
+- Writes statistics to a dedicated statistics file
+- Uses the current snapshot by default
+- Can target a specific snapshot if needed
+
+## Methods
+
+### snapshot
+
+Choose a specific table snapshot to compute partition statistics.
+
+```java
+ComputePartitionStats snapshot(long snapshotId)
+```
+
+**Parameters:**
+- `snapshotId` - The ID of the snapshot for which stats need to be computed
+
+**Returns:** `this` for method chaining
+
+**Example:**
+```java
+action.snapshot(1234567890L);
+```
+
+<Note>
+If not specified, the action uses the current snapshot of the table.
+</Note>
+
+## Result
+
+The `Result` interface provides information about the computed statistics.
+
+### Methods
+
+```java
+interface Result {
+  PartitionStatisticsFile statisticsFile();
+}
+```
+
+#### statisticsFile
+
+Returns the statistics file that was written, or `null` if no statistics were collected.
+
+**Returns:** `PartitionStatisticsFile` or `null`
+
+## Usage Examples
+
+### Compute Stats for Current Snapshot
+
+```java
+// Compute partition statistics for the current snapshot
+ComputePartitionStats.Result result = actions
+  .computePartitionStats(table)
+  .execute();
+
+PartitionStatisticsFile statsFile = result.statisticsFile();
+if (statsFile != null) {
+  System.out.println("Statistics file: " + statsFile.path());
+  System.out.println("Snapshot ID: " + statsFile.snapshotId());
+}
+```
+
+### Compute Stats for Specific Snapshot
+
+```java
+// Compute partition statistics for a specific snapshot
+long targetSnapshotId = table.currentSnapshot().parentId();
+
+ComputePartitionStats.Result result = actions
+  .computePartitionStats(table)
+  .snapshot(targetSnapshotId)
+  .execute();
+
+if (result.statisticsFile() != null) {
+  System.out.println("Computed stats for snapshot: " + targetSnapshotId);
+}
+```
+
+### Check Statistics File Details
+
+```java
+// Compute stats and examine the results
+ComputePartitionStats.Result result = actions
+  .computePartitionStats(table)
+  .execute();
+
+PartitionStatisticsFile statsFile = result.statisticsFile();
+if (statsFile != null) {
+  System.out.println("Statistics Details:");
+  System.out.println("  Path: " + statsFile.path());
+  System.out.println("  Snapshot: " + statsFile.snapshotId());
+  System.out.println("  Size: " + statsFile.fileSizeInBytes() + " bytes");
+} else {
+  System.out.println("No statistics were collected");
+}
+```
+
+## Best Practices
+
+1. **Compute after significant data changes**: Run this action after major writes or rewrites to keep statistics current
+
+2. **Use with query optimization**: Ensure your query engine is configured to use partition statistics
+
+3. **Monitor statistics freshness**: Outdated statistics may lead to suboptimal query plans
+
+4. **Consider snapshot selection**: For historical analysis, compute stats on specific snapshots
+
+<Note>
+Partition statistics are most beneficial for partitioned tables with selective query patterns.
+</Note>
+
+## Related
+
+- [ComputeTableStats](/api/actions/compute-table-stats) - Compute table-level statistics
+- [ExpireSnapshots](/api/actions/expire-snapshots) - Manage old snapshots
+- [RewriteDataFiles](/api/actions/rewrite-data-files) - Optimize data file layout

@@ -1,0 +1,331 @@
+---
+title: MigrateTable Action
+description: API reference for the MigrateTable action that migrates an existing table to Iceberg format
+---
+
+# MigrateTable
+
+The `MigrateTable` action migrates an existing non-Iceberg table to Iceberg format. This enables existing tables to leverage Iceberg's features like time travel, schema evolution, and ACID transactions.
+
+## Interface
+
+```java
+public interface MigrateTable extends Action<MigrateTable, MigrateTable.Result>
+```
+
+## Overview
+
+Migrating a table to Iceberg involves:
+- Reading the existing table metadata
+- Converting the schema and partition specification
+- Creating Iceberg metadata files
+- Preserving the original data files (no data rewrite required)
+- Optionally creating a backup of the original table
+
+The migration process is metadata-only and doesn't rewrite data files, making it fast and efficient.
+
+## Methods
+
+### tableProperties
+
+Sets multiple table properties in the newly created Iceberg table.
+
+```java
+MigrateTable tableProperties(Map<String, String> properties)
+```
+
+**Parameters:**
+- `properties` - A map of property key-value pairs to set
+
+**Returns:** `this` for method chaining
+
+**Example:**
+```java
+Map<String, String> props = new HashMap<>();
+props.put("write.format.default", "parquet");
+props.put("write.parquet.compression-codec", "snappy");
+action.tableProperties(props);
+```
+
+<Note>
+Properties with the same key will be overwritten by later calls.
+</Note>
+
+### tableProperty
+
+Sets a single table property in the newly created Iceberg table.
+
+```java
+MigrateTable tableProperty(String name, String value)
+```
+
+**Parameters:**
+- `name` - The property name
+- `value` - The property value
+
+**Returns:** `this` for method chaining
+
+**Example:**
+```java
+action
+  .tableProperty("write.format.default", "parquet")
+  .tableProperty("write.parquet.compression-codec", "snappy");
+```
+
+### dropBackup
+
+Drops the backup of the original table after a successful migration.
+
+```java
+MigrateTable dropBackup()
+```
+
+**Returns:** `this` for method chaining
+
+**Example:**
+```java
+action.dropBackup();
+```
+
+<Warning>
+Dropping the backup is irreversible. Ensure the migration is successful and verified before using this option.
+</Warning>
+
+### backupTableName
+
+Sets a custom table name for the backup of the original table.
+
+```java
+MigrateTable backupTableName(String tableName)
+```
+
+**Parameters:**
+- `tableName` - The name to use for the backup table
+
+**Returns:** `this` for method chaining
+
+**Example:**
+```java
+action.backupTableName("my_table_backup_20240101");
+```
+
+### executeWith
+
+Sets an executor service for parallel file reading during migration.
+
+```java
+MigrateTable executeWith(ExecutorService service)
+```
+
+**Parameters:**
+- `service` - The executor service to use
+
+**Returns:** `this` for method chaining
+
+**Example:**
+```java
+ExecutorService executor = Executors.newFixedThreadPool(10);
+action.executeWith(executor);
+```
+
+<Note>
+By default, migration does not use an executor service and processes files sequentially.
+</Note>
+
+## Result
+
+The `Result` interface provides statistics about the migration operation.
+
+### Methods
+
+```java
+interface Result {
+  long migratedDataFilesCount();
+}
+```
+
+#### migratedDataFilesCount
+
+Returns the number of data files that were migrated to Iceberg.
+
+**Returns:** `long` - Number of migrated data files
+
+## Usage Examples
+
+### Basic Table Migration
+
+```java
+// Migrate a Hive table to Iceberg
+MigrateTable.Result result = actions
+  .migrateTable("db.hive_table")
+  .execute();
+
+System.out.println("Migrated " + result.migratedDataFilesCount() + " data files");
+```
+
+### Migration with Table Properties
+
+```java
+// Migrate and set Iceberg table properties
+MigrateTable.Result result = actions
+  .migrateTable("db.source_table")
+  .tableProperty("write.format.default", "parquet")
+  .tableProperty("write.parquet.compression-codec", "zstd")
+  .tableProperty("write.target-file-size-bytes", "536870912") // 512 MB
+  .execute();
+
+System.out.println("Migration completed: " + result.migratedDataFilesCount() + " files");
+```
+
+### Migration with Multiple Properties
+
+```java
+// Migrate with a map of properties
+Map<String, String> properties = new HashMap<>();
+properties.put("write.format.default", "parquet");
+properties.put("write.parquet.compression-codec", "snappy");
+properties.put("write.metadata.compression-codec", "gzip");
+properties.put("commit.retry.num-retries", "3");
+
+MigrateTable.Result result = actions
+  .migrateTable("db.source_table")
+  .tableProperties(properties)
+  .execute();
+
+System.out.println("Migrated " + result.migratedDataFilesCount() + " files with custom properties");
+```
+
+### Migration with Custom Backup Name
+
+```java
+// Migrate and specify backup table name
+String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+String backupName = "source_table_backup_" + timestamp;
+
+MigrateTable.Result result = actions
+  .migrateTable("db.source_table")
+  .backupTableName(backupName)
+  .execute();
+
+System.out.println("Migration complete. Backup saved as: " + backupName);
+```
+
+### Migration Without Backup
+
+```java
+// Migrate and immediately drop the backup
+MigrateTable.Result result = actions
+  .migrateTable("db.source_table")
+  .dropBackup()
+  .execute();
+
+System.out.println("Migration completed without backup");
+```
+
+### Parallel Migration for Large Tables
+
+```java
+// Use parallel execution for large tables
+ExecutorService executor = Executors.newFixedThreadPool(20);
+
+try {
+  MigrateTable.Result result = actions
+    .migrateTable("db.large_table")
+    .executeWith(executor)
+    .tableProperty("write.format.default", "parquet")
+    .execute();
+
+  System.out.println("Migration Summary:");
+  System.out.println("  Files migrated: " + result.migratedDataFilesCount());
+  System.out.println("  Migration complete!");
+} finally {
+  executor.shutdown();
+}
+```
+
+### Complete Migration Workflow
+
+```java
+// Full migration with verification
+ExecutorService executor = Executors.newFixedThreadPool(10);
+
+try {
+  // Prepare properties
+  Map<String, String> icebergProps = new HashMap<>();
+  icebergProps.put("write.format.default", "parquet");
+  icebergProps.put("write.parquet.compression-codec", "zstd");
+  icebergProps.put("write.target-file-size-bytes", "536870912");
+  
+  // Execute migration
+  MigrateTable.Result result = actions
+    .migrateTable("db.source_table")
+    .tableProperties(icebergProps)
+    .backupTableName("source_table_pre_migration_backup")
+    .executeWith(executor)
+    .execute();
+  
+  // Verify migration
+  System.out.println("Migration Results:");
+  System.out.println("  Data files migrated: " + result.migratedDataFilesCount());
+  
+  // Load and verify the migrated table
+  Table migratedTable = catalog.loadTable(TableIdentifier.of("db", "source_table"));
+  System.out.println("  Current snapshot: " + migratedTable.currentSnapshot().snapshotId());
+  System.out.println("  Schema: " + migratedTable.schema());
+  System.out.println("Migration successful!");
+  
+} finally {
+  executor.shutdown();
+}
+```
+
+## Best Practices
+
+1. **Test in development first**: Migrate a copy of the table in a non-production environment
+
+2. **Keep backups initially**: Don't use `dropBackup()` until you've verified the migration
+
+3. **Set appropriate properties**: Configure Iceberg properties for your workload during migration
+
+4. **Use parallel execution for large tables**: Enable parallelism for tables with many files
+
+5. **Verify after migration**: Check schema, partitioning, and data integrity after migration
+
+6. **Plan for downtime**: Coordinate with users as the table may be briefly unavailable
+
+<Note>
+Migration is a metadata-only operation and doesn't rewrite data files, making it fast even for large tables.
+</Note>
+
+## Migration Checklist
+
+Before migrating:
+- [ ] Backup the original table metadata
+- [ ] Verify table schema compatibility
+- [ ] Plan for table downtime window
+- [ ] Test migration in development environment
+- [ ] Prepare rollback procedure
+
+After migrating:
+- [ ] Verify table is readable
+- [ ] Check snapshot and metadata
+- [ ] Validate row counts
+- [ ] Test query performance
+- [ ] Update applications to use new table
+
+## Supported Table Formats
+
+The specific table formats that can be migrated depend on the implementation:
+- **Spark**: Hive tables, Delta Lake tables
+- **Flink**: Hive tables
+- **Other engines**: Consult documentation for supported formats
+
+<Warning>
+Not all table formats support migration in all engines. Check your engine's documentation for supported source formats.
+</Warning>
+
+## Related
+
+- [SnapshotTable](/api/actions/snapshot-table) - Create an independent snapshot of a table
+- [RewriteDataFiles](/api/actions/rewrite-data-files) - Optimize data layout after migration
+- [ComputeTableStats](/api/actions/compute-table-stats) - Compute statistics for the migrated table

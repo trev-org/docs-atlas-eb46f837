@@ -1,0 +1,346 @@
+---
+title: RewritePositionDeleteFiles Action
+description: API reference for the RewritePositionDeleteFiles action that optimizes position delete file layout and size
+---
+
+# RewritePositionDeleteFiles
+
+The `RewritePositionDeleteFiles` action rewrites position delete files to optimize their size and layout within a table. This is commonly used for compacting small delete files and improving query performance.
+
+## Interface
+
+```java
+public interface RewritePositionDeleteFiles extends SnapshotUpdate<RewritePositionDeleteFiles, RewritePositionDeleteFiles.Result>
+```
+
+## Overview
+
+Position delete files can accumulate and become fragmented over time, especially with frequent delete operations. Rewriting them helps by:
+- Combining small delete files into larger, more efficient ones
+- Reducing metadata overhead for query planning
+- Improving scan performance by reducing file count
+- Optimizing storage layout
+
+## Configuration Options
+
+### Partial Progress
+
+**`partial-progress.enabled`** (default: `false`)
+
+Enable committing groups of files before the entire rewrite completes. This produces additional commits but allows progress even if some groups fail.
+
+**`partial-progress.max-commits`** (default: `10`)
+
+Maximum number of Iceberg commits allowed when partial progress is enabled.
+
+### Concurrency
+
+**`max-concurrent-file-group-rewrites`** (default: `5`)
+
+Maximum number of file groups to rewrite simultaneously. Each group is rewritten independently and asynchronously.
+
+### Job Ordering
+
+**`rewrite-job-order`** (default: `none`)
+
+Forces the rewrite job order based on the value:
+- `bytes-asc` - Rewrite smallest job groups first
+- `bytes-desc` - Rewrite largest job groups first  
+- `files-asc` - Rewrite groups with least files first
+- `files-desc` - Rewrite groups with most files first
+- `none` - No specific ordering (planned order)
+
+## Methods
+
+### filter
+
+Filter which position delete files to rewrite based on partition values.
+
+```java
+RewritePositionDeleteFiles filter(Expression expression)
+```
+
+**Parameters:**
+- `expression` - An Iceberg expression used to find deletes. The filter will be converted to a partition filter with inclusive projection.
+
+**Returns:** `this` for method chaining
+
+**Example:**
+```java
+// Rewrite position deletes in specific partitions
+action.filter(Expressions.equal("date", "2024-01-01"));
+```
+
+<Note>
+Any file that may contain rows matching this filter will be included in the rewrite. The filter uses inclusive projection for partition-level matching.
+</Note>
+
+## Result
+
+The `Result` interface provides statistics about the rewrite operation.
+
+### Methods
+
+```java
+interface Result {
+  List<FileGroupRewriteResult> rewriteResults();
+  int rewrittenDeleteFilesCount();
+  int addedDeleteFilesCount();
+  long rewrittenBytesCount();
+  long addedBytesCount();
+}
+```
+
+#### rewriteResults
+
+Returns detailed results for each file group that was rewritten.
+
+**Returns:** `List<FileGroupRewriteResult>`
+
+#### rewrittenDeleteFilesCount
+
+Returns the total count of position delete files that have been rewritten.
+
+**Returns:** `int` - Number of rewritten files
+
+#### addedDeleteFilesCount
+
+Returns the total count of newly created position delete files.
+
+**Returns:** `int` - Number of new files
+
+#### rewrittenBytesCount
+
+Returns the total number of bytes of position delete files that have been rewritten.
+
+**Returns:** `long` - Bytes rewritten
+
+#### addedBytesCount
+
+Returns the total number of bytes of newly added position delete files.
+
+**Returns:** `long` - Bytes added
+
+### FileGroupRewriteResult
+
+Detailed results for a particular position delete file group.
+
+```java
+interface FileGroupRewriteResult {
+  FileGroupInfo info();
+  int rewrittenDeleteFilesCount();
+  int addedDeleteFilesCount();
+  long rewrittenBytesCount();
+  long addedBytesCount();
+}
+```
+
+### FileGroupInfo
+
+Description of a position delete file group.
+
+```java
+interface FileGroupInfo {
+  int globalIndex();
+  int partitionIndex();
+  StructLike partition();
+}
+```
+
+## Usage Examples
+
+### Basic Rewrite
+
+```java
+// Rewrite all position delete files
+RewritePositionDeleteFiles.Result result = actions
+  .rewritePositionDeleteFiles(table)
+  .execute();
+
+System.out.println("Rewrite Summary:");
+System.out.println("  Files rewritten: " + result.rewrittenDeleteFilesCount());
+System.out.println("  Files created: " + result.addedDeleteFilesCount());
+System.out.println("  Bytes rewritten: " + result.rewrittenBytesCount());
+System.out.println("  Bytes added: " + result.addedBytesCount());
+```
+
+### Rewrite Specific Partitions
+
+```java
+// Rewrite position deletes only in recent partitions
+RewritePositionDeleteFiles.Result result = actions
+  .rewritePositionDeleteFiles(table)
+  .filter(Expressions.greaterThanOrEqual("date", "2024-01-01"))
+  .execute();
+
+System.out.println("Rewrote " + result.rewrittenDeleteFilesCount() + 
+  " position delete files in recent partitions");
+```
+
+### With Custom Options
+
+```java
+// Rewrite with custom concurrency and ordering
+RewritePositionDeleteFiles.Result result = actions
+  .rewritePositionDeleteFiles(table)
+  .option("max-concurrent-file-group-rewrites", "10")
+  .option("rewrite-job-order", "bytes-desc")
+  .execute();
+
+System.out.println("Completed rewrite with " + result.rewriteResults().size() + " groups");
+```
+
+### With Partial Progress
+
+```java
+// Enable partial progress for large rewrites
+RewritePositionDeleteFiles.Result result = actions
+  .rewritePositionDeleteFiles(table)
+  .option("partial-progress.enabled", "true")
+  .option("partial-progress.max-commits", "20")
+  .option("max-concurrent-file-group-rewrites", "10")
+  .execute();
+
+System.out.println("Partial progress enabled:");
+System.out.println("  Files rewritten: " + result.rewrittenDeleteFilesCount());
+System.out.println("  Files created: " + result.addedDeleteFilesCount());
+```
+
+### Analyze Rewrite Results
+
+```java
+// Rewrite and analyze detailed results
+RewritePositionDeleteFiles.Result result = actions
+  .rewritePositionDeleteFiles(table)
+  .execute();
+
+System.out.println("Rewrite Results by Group:");
+for (RewritePositionDeleteFiles.FileGroupRewriteResult groupResult : result.rewriteResults()) {
+  FileGroupInfo info = groupResult.info();
+  System.out.println("\nGroup " + info.globalIndex() + ":");
+  System.out.println("  Partition: " + info.partition());
+  System.out.println("  Files rewritten: " + groupResult.rewrittenDeleteFilesCount());
+  System.out.println("  Files added: " + groupResult.addedDeleteFilesCount());
+  System.out.println("  Bytes rewritten: " + groupResult.rewrittenBytesCount());
+  System.out.println("  Bytes added: " + groupResult.addedBytesCount());
+}
+```
+
+### Calculate Compression Ratio
+
+```java
+// Rewrite and calculate compression achieved
+RewritePositionDeleteFiles.Result result = actions
+  .rewritePositionDeleteFiles(table)
+  .execute();
+
+long bytesRewritten = result.rewrittenBytesCount();
+long bytesAdded = result.addedBytesCount();
+
+if (bytesRewritten > 0) {
+  double compressionRatio = (double) bytesAdded / bytesRewritten;
+  double savingsPercent = (1 - compressionRatio) * 100;
+  
+  System.out.println("Rewrite Statistics:");
+  System.out.println("  Original size: " + bytesRewritten + " bytes");
+  System.out.println("  New size: " + bytesAdded + " bytes");
+  System.out.println("  Compression ratio: " + String.format("%.2f", compressionRatio));
+  System.out.println("  Savings: " + String.format("%.1f%%", savingsPercent));
+}
+```
+
+### Filter Multiple Partitions
+
+```java
+// Rewrite position deletes in a date range
+RewritePositionDeleteFiles.Result result = actions
+  .rewritePositionDeleteFiles(table)
+  .filter(Expressions.and(
+    Expressions.greaterThanOrEqual("date", "2024-01-01"),
+    Expressions.lessThan("date", "2024-02-01")
+  ))
+  .execute();
+
+System.out.println("Rewrote position deletes in January 2024");
+System.out.println("  Files before: " + result.rewrittenDeleteFilesCount());
+System.out.println("  Files after: " + result.addedDeleteFilesCount());
+```
+
+### Complete Optimization Workflow
+
+```java
+// Full delete file optimization workflow
+
+// Step 1: Rewrite position delete files
+RewritePositionDeleteFiles.Result rewriteResult = actions
+  .rewritePositionDeleteFiles(table)
+  .option("max-concurrent-file-group-rewrites", "10")
+  .option("rewrite-job-order", "bytes-desc")
+  .execute();
+
+System.out.println("Position Delete Rewrite:");
+System.out.println("  Files: " + rewriteResult.rewrittenDeleteFilesCount() + 
+  " -> " + rewriteResult.addedDeleteFilesCount());
+System.out.println("  Size: " + rewriteResult.rewrittenBytesCount() + 
+  " -> " + rewriteResult.addedBytesCount());
+
+// Step 2: Remove any dangling deletes
+RemoveDanglingDeleteFiles.Result cleanupResult = actions
+  .removeDanglingDeleteFiles(table)
+  .execute();
+
+int danglingCount = 0;
+for (DeleteFile df : cleanupResult.removedDeleteFiles()) {
+  danglingCount++;
+}
+
+System.out.println("\nCleanup:");
+System.out.println("  Dangling deletes removed: " + danglingCount);
+
+System.out.println("\nOptimization complete!");
+```
+
+## Best Practices
+
+1. **Run after delete operations**: Execute this action after batch delete operations to compact delete files
+
+2. **Use partition filters**: For large tables, rewrite delete files partition by partition
+
+3. **Enable partial progress**: For very large tables, enable partial progress to avoid losing work on failure
+
+4. **Monitor compression**: Track the compression ratio to understand optimization effectiveness
+
+5. **Adjust concurrency**: Set concurrency based on cluster capacity and table size
+
+6. **Combine with other optimizations**: Run alongside data file compaction for comprehensive optimization
+
+<Note>
+Rewriting position delete files creates a new snapshot. Old files remain accessible through previous snapshots until they are expired.
+</Note>
+
+## Performance Considerations
+
+- **File reduction**: Fewer files mean faster query planning and execution
+- **Size optimization**: Larger, consolidated files are more efficient
+- **Resource usage**: Adjust concurrency settings based on available resources
+- **Partial progress**: Prevents losing work in case of failures during large rewrites
+
+<Warning>
+This action rewrites delete files and creates a new snapshot. Ensure you have appropriate snapshot retention policies configured.
+</Warning>
+
+## When to Run This Action
+
+Run `RewritePositionDeleteFiles` when:
+- Position delete files are numerous and small
+- Query planning is slow due to delete file overhead
+- After bulk delete operations
+- As part of regular table maintenance
+- Before computing table statistics
+
+## Related
+
+- [ConvertEqualityDeleteFiles](/api/actions/convert-equality-delete-files) - Convert equality to position deletes
+- [RemoveDanglingDeleteFiles](/api/actions/remove-dangling-delete-files) - Remove obsolete delete files
+- [RewriteDataFiles](/api/actions/rewrite-data-files) - Optimize data file layout
+- [ExpireSnapshots](/api/actions/expire-snapshots) - Clean up old snapshots

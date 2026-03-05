@@ -1,0 +1,170 @@
+---
+title: ConvertEqualityDeleteFiles Action
+description: API reference for the ConvertEqualityDeleteFiles action that converts equality delete files to position delete files
+---
+
+# ConvertEqualityDeleteFiles
+
+The `ConvertEqualityDeleteFiles` action converts equality delete files to position delete files. This optimization can improve query performance by using more efficient position-based deletes.
+
+## Interface
+
+```java
+public interface ConvertEqualityDeleteFiles extends SnapshotUpdate<ConvertEqualityDeleteFiles, ConvertEqualityDeleteFiles.Result>
+```
+
+## Overview
+
+Equality delete files identify deleted rows by column values, while position delete files identify them by file and row position. Position deletes are typically more efficient for queries because:
+- They require less computation to apply
+- They have a smaller storage footprint
+- They can be applied more quickly during scans
+
+This action converts equality deletes to position deletes by:
+1. Reading the equality delete conditions
+2. Identifying matching row positions in data files
+3. Writing new position delete files
+4. Removing the original equality delete files
+
+## Methods
+
+### filter
+
+Filter which equality delete files to convert based on partition values.
+
+```java
+ConvertEqualityDeleteFiles filter(Expression expression)
+```
+
+**Parameters:**
+- `expression` - An Iceberg expression used to find deletes. The filter will be converted to a partition filter with an inclusive projection.
+
+**Returns:** `this` for method chaining
+
+**Example:**
+```java
+// Convert equality deletes in specific partitions
+action.filter(Expressions.equal("date", "2024-01-01"));
+```
+
+<Note>
+Any file that may contain rows matching this filter will be included in the conversion. The filter uses inclusive projection for partition-level matching.
+</Note>
+
+## Result
+
+The `Result` interface provides statistics about the conversion operation.
+
+### Methods
+
+```java
+interface Result {
+  int convertedEqualityDeleteFilesCount();
+  int addedPositionDeleteFilesCount();
+}
+```
+
+#### convertedEqualityDeleteFilesCount
+
+Returns the count of equality delete files that were converted.
+
+**Returns:** `int` - Number of converted files
+
+#### addedPositionDeleteFilesCount
+
+Returns the count of position delete files that were created.
+
+**Returns:** `int` - Number of new position delete files
+
+## Usage Examples
+
+### Convert All Equality Deletes
+
+```java
+// Convert all equality delete files to position deletes
+ConvertEqualityDeleteFiles.Result result = actions
+  .convertEqualityDeleteFiles(table)
+  .execute();
+
+System.out.println("Converted " + result.convertedEqualityDeleteFilesCount() + " equality delete files");
+System.out.println("Created " + result.addedPositionDeleteFilesCount() + " position delete files");
+```
+
+### Convert Deletes in Specific Partitions
+
+```java
+// Convert equality deletes only in recent partitions
+ConvertEqualityDeleteFiles.Result result = actions
+  .convertEqualityDeleteFiles(table)
+  .filter(Expressions.greaterThanOrEqual("date", "2024-01-01"))
+  .execute();
+
+System.out.println("Conversion completed:");
+System.out.println("  Equality deletes converted: " + result.convertedEqualityDeleteFilesCount());
+System.out.println("  Position deletes created: " + result.addedPositionDeleteFilesCount());
+```
+
+### Convert Deletes with Multiple Filters
+
+```java
+// Convert equality deletes matching multiple conditions
+ConvertEqualityDeleteFiles.Result result = actions
+  .convertEqualityDeleteFiles(table)
+  .filter(Expressions.and(
+    Expressions.greaterThanOrEqual("date", "2024-01-01"),
+    Expressions.lessThan("date", "2024-02-01")
+  ))
+  .execute();
+
+if (result.convertedEqualityDeleteFilesCount() > 0) {
+  System.out.println("Successfully converted deletes in January 2024 partition");
+}
+```
+
+### Monitor Conversion Progress
+
+```java
+// Convert deletes and track the conversion ratio
+ConvertEqualityDeleteFiles.Result result = actions
+  .convertEqualityDeleteFiles(table)
+  .execute();
+
+int converted = result.convertedEqualityDeleteFilesCount();
+int created = result.addedPositionDeleteFilesCount();
+
+if (converted > 0) {
+  double ratio = (double) created / converted;
+  System.out.println("Conversion Summary:");
+  System.out.println("  Equality deletes: " + converted);
+  System.out.println("  Position deletes: " + created);
+  System.out.println("  Ratio: " + String.format("%.2f", ratio));
+}
+```
+
+## Best Practices
+
+1. **Run after delete operations**: Convert equality deletes after batch delete operations complete
+
+2. **Use partition filters**: For large tables, convert deletes partition by partition to manage resource usage
+
+3. **Monitor file counts**: Track the conversion ratio to understand delete file characteristics
+
+4. **Combine with compaction**: Consider running alongside data file compaction for comprehensive optimization
+
+5. **Test impact**: Measure query performance improvements after conversion
+
+<Warning>
+This action creates a new snapshot. Ensure you have appropriate retention policies configured to clean up old snapshots.
+</Warning>
+
+## Performance Considerations
+
+- **Read overhead**: The action must read data files to determine row positions
+- **Write amplification**: Multiple position delete files may be created from a single equality delete file
+- **Query improvement**: Queries typically benefit from faster delete application
+
+## Related
+
+- [RewritePositionDeleteFiles](/api/actions/rewrite-position-delete-files) - Optimize position delete files
+- [RemoveDanglingDeleteFiles](/api/actions/remove-dangling-delete-files) - Remove obsolete delete files
+- [RewriteDataFiles](/api/actions/rewrite-data-files) - Optimize data file layout

@@ -159,8 +159,15 @@
               "api/actions/expire-snapshots",
               "api/actions/rewrite-data-files",
               "api/actions/rewrite-manifests",
+              "api/actions/rewrite-position-delete-files",
               "api/actions/delete-orphan-files",
-              "api/actions/compute-table-stats"
+              "api/actions/delete-reachable-files",
+              "api/actions/remove-dangling-delete-files",
+              "api/actions/compute-table-stats",
+              "api/actions/compute-partition-stats",
+              "api/actions/convert-equality-delete-files",
+              "api/actions/migrate-table",
+              "api/actions/snapshot-table"
             ]
           },
           {

@@ -1,0 +1,378 @@
+---
+title: SnapshotTable Action
+description: API reference for the SnapshotTable action that creates an independent snapshot of an existing table
+---
+
+# SnapshotTable
+
+The `SnapshotTable` action creates an independent snapshot of an existing table as a new Iceberg table. This creates a separate table that shares the same underlying data files without copying them.
+
+## Interface
+
+```java
+public interface SnapshotTable extends Action<SnapshotTable, SnapshotTable.Result>
+```
+
+## Overview
+
+The snapshot action creates a new Iceberg table that:
+- References the same data files as the source table
+- Has its own independent metadata and history
+- Can be modified without affecting the source table
+- Requires no data file copying (metadata-only operation)
+- Is useful for creating test environments or table branches
+
+This is particularly useful for:
+- Creating test or development copies of production tables
+- Establishing a baseline for experimentation
+- Creating table snapshots for backup purposes
+- Branching table state for parallel workflows
+
+## Methods
+
+### as
+
+Sets the table identifier for the newly created Iceberg table.
+
+```java
+SnapshotTable as(String destTableIdent)
+```
+
+**Parameters:**
+- `destTableIdent` - The destination table identifier (e.g., "db.new_table")
+
+**Returns:** `this` for method chaining
+
+**Example:**
+```java
+action.as("test_db.snapshot_table");
+```
+
+### tableLocation
+
+Sets the table location for the newly created Iceberg table.
+
+```java
+SnapshotTable tableLocation(String location)
+```
+
+**Parameters:**
+- `location` - The file system path where the new table metadata should be stored
+
+**Returns:** `this` for method chaining
+
+**Example:**
+```java
+action.tableLocation("s3://bucket/warehouse/test_db/snapshot_table");
+```
+
+### tableProperties
+
+Sets multiple table properties in the newly created Iceberg table.
+
+```java
+SnapshotTable tableProperties(Map<String, String> properties)
+```
+
+**Parameters:**
+- `properties` - A map of property key-value pairs to include
+
+**Returns:** `this` for method chaining
+
+**Example:**
+```java
+Map<String, String> props = new HashMap<>();
+props.put("write.format.default", "parquet");
+props.put("write.parquet.compression-codec", "snappy");
+action.tableProperties(props);
+```
+
+<Note>
+Properties with the same key will be overwritten by later calls.
+</Note>
+
+### tableProperty
+
+Sets a single table property in the newly created Iceberg table.
+
+```java
+SnapshotTable tableProperty(String key, String value)
+```
+
+**Parameters:**
+- `key` - The property key
+- `value` - The property value
+
+**Returns:** `this` for method chaining
+
+**Example:**
+```java
+action
+  .tableProperty("write.format.default", "parquet")
+  .tableProperty("write.parquet.compression-codec", "zstd");
+```
+
+### executeWith
+
+Sets an executor service for parallel file reading during the snapshot operation.
+
+```java
+SnapshotTable executeWith(ExecutorService service)
+```
+
+**Parameters:**
+- `service` - The executor service to use
+
+**Returns:** `this` for method chaining
+
+**Example:**
+```java
+ExecutorService executor = Executors.newFixedThreadPool(10);
+action.executeWith(executor);
+```
+
+<Note>
+By default, the snapshot operation does not use an executor service. This method is optional and may not be supported by all implementations.
+</Note>
+
+## Result
+
+The `Result` interface provides statistics about the snapshot operation.
+
+### Methods
+
+```java
+interface Result {
+  long importedDataFilesCount();
+}
+```
+
+#### importedDataFilesCount
+
+Returns the number of data files that were imported (referenced) into the new table.
+
+**Returns:** `long` - Number of imported data files
+
+## Usage Examples
+
+### Basic Table Snapshot
+
+```java
+// Create a snapshot of a production table for testing
+SnapshotTable.Result result = actions
+  .snapshotTable("prod_db.orders")
+  .as("test_db.orders_snapshot")
+  .execute();
+
+System.out.println("Snapshot created with " + result.importedDataFilesCount() + " data files");
+```
+
+### Snapshot with Custom Location
+
+```java
+// Create a snapshot at a specific location
+SnapshotTable.Result result = actions
+  .snapshotTable("prod_db.events")
+  .as("dev_db.events_snapshot")
+  .tableLocation("s3://dev-bucket/warehouse/dev_db/events_snapshot")
+  .execute();
+
+System.out.println("Created snapshot with " + result.importedDataFilesCount() + " files");
+```
+
+### Snapshot with Table Properties
+
+```java
+// Create a snapshot with custom properties
+SnapshotTable.Result result = actions
+  .snapshotTable("prod_db.users")
+  .as("test_db.users_snapshot")
+  .tableProperty("write.format.default", "parquet")
+  .tableProperty("write.parquet.compression-codec", "zstd")
+  .tableProperty("read.split.target-size", "134217728") // 128 MB
+  .execute();
+
+System.out.println("Snapshot ready for testing");
+```
+
+### Snapshot with Multiple Properties
+
+```java
+// Create a snapshot with a map of properties
+Map<String, String> properties = new HashMap<>();
+properties.put("write.format.default", "parquet");
+properties.put("write.metadata.compression-codec", "gzip");
+properties.put("commit.retry.num-retries", "5");
+properties.put("write.target-file-size-bytes", "536870912"); // 512 MB
+
+SnapshotTable.Result result = actions
+  .snapshotTable("prod_db.transactions")
+  .as("staging_db.transactions_snapshot")
+  .tableProperties(properties)
+  .execute();
+
+System.out.println("Imported " + result.importedDataFilesCount() + " data files");
+```
+
+### Parallel Snapshot for Large Tables
+
+```java
+// Use parallel execution for large tables
+ExecutorService executor = Executors.newFixedThreadPool(20);
+
+try {
+  SnapshotTable.Result result = actions
+    .snapshotTable("prod_db.large_table")
+    .as("test_db.large_table_snapshot")
+    .executeWith(executor)
+    .execute();
+
+  System.out.println("Snapshot Summary:");
+  System.out.println("  Files imported: " + result.importedDataFilesCount());
+  System.out.println("  Snapshot complete!");
+} finally {
+  executor.shutdown();
+}
+```
+
+### Create Multiple Snapshots
+
+```java
+// Create snapshots of multiple tables
+String[] tables = {"orders", "customers", "products"};
+
+for (String tableName : tables) {
+  SnapshotTable.Result result = actions
+    .snapshotTable("prod_db." + tableName)
+    .as("test_db." + tableName + "_snapshot")
+    .tableProperty("write.format.default", "parquet")
+    .execute();
+  
+  System.out.println("Snapshotted " + tableName + ": " + 
+    result.importedDataFilesCount() + " files");
+}
+```
+
+### Snapshot for Experimentation
+
+```java
+// Create a snapshot for testing schema evolution
+SnapshotTable.Result result = actions
+  .snapshotTable("prod_db.analytics")
+  .as("dev_db.analytics_experiment")
+  .tableLocation("s3://dev-bucket/experiments/analytics")
+  .tableProperty("schema.evolution.enabled", "true")
+  .execute();
+
+System.out.println("Experiment table created with " + 
+  result.importedDataFilesCount() + " files");
+
+// Now you can safely modify the snapshot without affecting production
+Table experimentTable = catalog.loadTable(
+  TableIdentifier.of("dev_db", "analytics_experiment"));
+
+// Make experimental changes...
+System.out.println("Ready for schema evolution experiments");
+```
+
+### Complete Snapshot Workflow
+
+```java
+// Full snapshot creation with verification
+String sourceTable = "prod_db.sales";
+String destTable = "test_db.sales_snapshot_" + System.currentTimeMillis();
+
+// Create snapshot
+Map<String, String> props = new HashMap<>();
+props.put("write.format.default", "parquet");
+props.put("write.parquet.compression-codec", "snappy");
+props.put("snapshot.source-table", sourceTable);
+props.put("snapshot.created-at", Instant.now().toString());
+
+SnapshotTable.Result result = actions
+  .snapshotTable(sourceTable)
+  .as(destTable)
+  .tableProperties(props)
+  .execute();
+
+System.out.println("Snapshot Creation Results:");
+System.out.println("  Source: " + sourceTable);
+System.out.println("  Destination: " + destTable);
+System.out.println("  Files imported: " + result.importedDataFilesCount());
+
+// Verify the snapshot
+Table sourceTableObj = catalog.loadTable(TableIdentifier.parse(sourceTable));
+Table snapshotTableObj = catalog.loadTable(TableIdentifier.parse(destTable));
+
+System.out.println("\nVerification:");
+System.out.println("  Source schema: " + sourceTableObj.schema());
+System.out.println("  Snapshot schema: " + snapshotTableObj.schema());
+System.out.println("  Schemas match: " + 
+  sourceTableObj.schema().sameSchema(snapshotTableObj.schema()));
+```
+
+## Best Practices
+
+1. **Use descriptive names**: Include timestamps or purpose in snapshot table names
+
+2. **Set appropriate properties**: Configure the snapshot table for its intended use case
+
+3. **Document snapshots**: Use table properties to record the source and creation time
+
+4. **Clean up snapshots**: Remove snapshots when no longer needed to avoid clutter
+
+5. **Consider location**: Place test/dev snapshots in appropriate storage locations
+
+6. **Verify after creation**: Check that the snapshot has the expected schema and data
+
+<Note>
+The snapshot operation is metadata-only and doesn't copy data files, making it fast and storage-efficient.
+</Note>
+
+## Key Characteristics
+
+- **No data copying**: Data files are referenced, not duplicated
+- **Independent metadata**: Each snapshot has its own metadata and history
+- **Fast operation**: Metadata-only, completes quickly even for large tables
+- **Storage efficient**: Only metadata is duplicated, not data
+- **Isolated changes**: Modifications to the snapshot don't affect the source
+
+<Warning>
+Deleting data files from the source table (e.g., via ExpireSnapshots with file deletion) will affect the snapshot since they share the same files.
+</Warning>
+
+## Use Cases
+
+### Testing and Development
+```java
+// Create a snapshot for development testing
+actions.snapshotTable("prod.users")
+  .as("dev.users_test")
+  .tableProperty("environment", "development")
+  .execute();
+```
+
+### Experimentation
+```java
+// Create a snapshot for schema evolution experiments
+actions.snapshotTable("prod.events")
+  .as("experimental.events_v2")
+  .tableProperty("purpose", "schema-evolution-test")
+  .execute();
+```
+
+### Backup/Baseline
+```java
+// Create a snapshot as a baseline before major changes
+String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+actions.snapshotTable("prod.critical_data")
+  .as("backup.critical_data_" + timestamp)
+  .tableProperty("backup.type", "pre-migration")
+  .execute();
+```
+
+## Related
+
+- [MigrateTable](/api/actions/migrate-table) - Migrate non-Iceberg tables to Iceberg
+- [RewriteDataFiles](/api/actions/rewrite-data-files) - Optimize data file layout
+- [ExpireSnapshots](/api/actions/expire-snapshots) - Manage snapshot history
