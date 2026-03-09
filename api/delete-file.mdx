@@ -1,0 +1,37 @@
+---
+title: DeleteFile
+description: Reference for Apache Iceberg DeleteFile metadata used by row-level deletes
+---
+
+# DeleteFile
+
+`DeleteFile` describes a delete artifact tracked by an Iceberg table. Delete files let engines represent row-level deletes without rewriting every underlying data file immediately.
+
+## Delete file types
+
+### Position deletes
+
+Position deletes identify rows by data-file path and row position.
+
+### Equality deletes
+
+Equality deletes identify rows by matching one or more column values.
+
+## Common usage
+
+You usually encounter `DeleteFile` when working with `RowDelta`, merge workflows, and maintenance tasks that rewrite or compact delete files.
+
+```java
+DeleteFile deletes = FileMetadata.deleteFileBuilder(table.spec())
+    .ofPositionDeletes()
+    .withPath("s3://warehouse/db/table/delete-file.parquet")
+    .withFileSizeInBytes(4_096L)
+    .withRecordCount(25L)
+    .build();
+```
+
+## Related
+
+- [RowDelta](/api/write/row-delta) - Apply row-level changes
+- [DeleteFiles](/api/write/delete-files) - Remove tracked data files from a table
+- [Table Interface](/api/table) - Core table operations

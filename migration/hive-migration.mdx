@@ -41,7 +41,7 @@ The snapshot action creates a new table with a different name, leaving the sourc
 CALL spark_catalog.system.snapshot('analytics.events', 'analytics.events_iceberg');
 ```
 
-See [Spark Procedure: snapshot](/spark/procedures#snapshot) for more details.
+See [Spark Procedure: snapshot](/engines/spark/procedures#snapshot) for more details.
 
 ## Migrate Hive Table To Iceberg
 
@@ -62,7 +62,7 @@ The migrate action replaces the source table with an Iceberg table of the same n
 CALL spark_catalog.system.migrate('analytics.events');
 ```
 
-See [Spark Procedure: migrate](/spark/procedures#migrate) for more details.
+See [Spark Procedure: migrate](/engines/spark/procedures#migrate) for more details.
 
 ## Add Files From Hive Table to Iceberg
 
@@ -89,7 +89,7 @@ CALL spark_catalog.system.add_files(
 );
 ```
 
-See [Spark Procedure: add_files](/spark/procedures#add_files) for more details.
+See [Spark Procedure: add_files](/engines/spark/procedures#add_files) for more details.
 
 ## Migration Workflow
 

@@ -8,7 +8,7 @@ description: Learn how to implement custom catalog, TableOperations, FileIO, and
 Apache Iceberg provides a flexible architecture for building custom catalogs that integrate with your organization's metadata infrastructure. This guide covers implementing custom components for complete control over metadata management.
 
 <Note>
-To work with encrypted tables, custom catalogs must address specific [security requirements](/security/encryption#catalog-requirements).
+To work with encrypted tables, custom catalogs must address specific [security requirements](/advanced/encryption#catalog-security-requirements).
 </Note>
 
 ## Custom TableOperations
@@ -336,9 +336,9 @@ public class CustomCatalog extends BaseMetastoreCatalog
 
 For a complete working example, see the reference implementations:
 
-- [JdbcCatalog](~/workspace/source/core/src/main/java/org/apache/iceberg/jdbc/JdbcCatalog.java) - Relational database catalog
-- [HadoopCatalog](~/workspace/source/core/src/main/java/org/apache/iceberg/hadoop/HadoopCatalog.java) - File system catalog
-- [GlueCatalog](~/workspace/source/aws/src/main/java/org/apache/iceberg/aws/glue/GlueCatalog.java) - AWS Glue integration
+- [JdbcCatalog](https://github.com/apache/iceberg/blob/main/core/src/main/java/org/apache/iceberg/jdbc/JdbcCatalog.java) - Relational database catalog
+- [HadoopCatalog](https://github.com/apache/iceberg/blob/main/core/src/main/java/org/apache/iceberg/hadoop/HadoopCatalog.java) - File system catalog
+- [GlueCatalog](https://github.com/apache/iceberg/blob/main/aws/src/main/java/org/apache/iceberg/aws/glue/GlueCatalog.java) - AWS Glue integration
 
 ## Next Steps
 

@@ -35,8 +35,6 @@ In-place metadata migration preserves the existing data files while incorporatin
 The new table and the source table are not fully isolated. If any processes vacuum data files from the source table, the new table will also be affected.
 </Warning>
 
-![In-Place Metadata Migration](/images/iceberg-in-place-metadata-migration.png)
-
 Apache Iceberg supports the in-place metadata migration approach, which includes three important actions:
 
 ## Snapshot Table
@@ -47,13 +45,11 @@ The Snapshot Table action creates a new Iceberg table with a different name and 
   <Step title="Create new Iceberg table">
     Create a new Iceberg table with the same metadata (schema, partition spec, etc.) as the source table and a different name. Readers and Writers on the source table can continue to work.
 
-    ![Snapshot Table Step 1](/images/iceberg-snapshotaction-step1.png)
   </Step>
 
   <Step title="Commit data files">
     Commit all data files across all partitions to the new Iceberg table. The source table remains unchanged. Readers can be switched to the new Iceberg table.
 
-    ![Snapshot Table Step 2](/images/iceberg-snapshotaction-step2.png)
   </Step>
 
   <Step title="Switch writers">
@@ -73,19 +69,16 @@ Migrate Table requires all modifications working on the source table to be stopp
   <Step title="Stop all writers">
     Stop all writers interacting with the source table. Readers that also support Iceberg may continue reading.
 
-    ![Migrate Table Step 1](/images/iceberg-migrateaction-step1.png)
   </Step>
 
   <Step title="Create new table and rename source">
     Create a new Iceberg table with the same identifier and metadata (schema, partition spec, etc.) as the source table. Rename the source table for a backup in case of failure and rollback.
 
-    ![Migrate Table Step 2](/images/iceberg-migrateaction-step2.png)
   </Step>
 
   <Step title="Commit files and drop source">
     Commit all data files across all partitions to the new Iceberg table. Drop the source table. Writers can start writing to the new Iceberg table.
 
-    ![Migrate Table Step 3](/images/iceberg-migrateaction-step3.png)
   </Step>
 </Steps>
 

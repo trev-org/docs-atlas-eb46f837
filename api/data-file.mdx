@@ -1,0 +1,33 @@
+---
+title: DataFile
+description: Reference for Apache Iceberg DataFile metadata and common usage patterns
+---
+
+# DataFile
+
+`DataFile` represents a physical data file tracked by an Iceberg table. It carries the file path, format, partition data, record counts, file size, and column-level metrics used during planning.
+
+## What it contains
+
+- File path and format
+- Partition values for the file
+- Record count and file size
+- Column metrics such as null counts and bounds
+
+## Common usage
+
+You most often work with `DataFile` when you append new files, inspect scan tasks, or rewrite existing files as part of maintenance operations.
+
+```java
+DataFile dataFile = DataFiles.builder(table.spec())
+    .withPath("s3://warehouse/db/table/data.parquet")
+    .withFileSizeInBytes(10_485_760L)
+    .withRecordCount(100_000L)
+    .build();
+```
+
+## Related
+
+- [AppendFiles](/api/write/append-files) - Append new data files to a table
+- [DeleteFiles](/api/write/delete-files) - Remove tracked data files from a table
+- [Table Interface](/api/table) - Core table operations

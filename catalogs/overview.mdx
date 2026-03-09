@@ -34,11 +34,11 @@ public interface Catalog {
 Iceberg provides several catalog implementations for different use cases:
 
 <CardGroup cols={2}>
-  <Card title="Hive Metastore" icon="database" href="/catalogs/hive">
+  <Card title="Hive Metastore" icon="database" href="/engines/hive/overview">
     Use existing Hive metastore infrastructure
   </Card>
   
-  <Card title="AWS Glue" icon="aws" href="/catalogs/glue">
+  <Card title="AWS Glue" icon="aws" href="/storage/aws">
     Native AWS Glue catalog integration
   </Card>
   
@@ -50,11 +50,11 @@ Iceberg provides several catalog implementations for different use cases:
     Git-like operations with multi-table transactions
   </Card>
   
-  <Card title="REST" icon="server" href="/catalogs/rest">
+  <Card title="REST" icon="server" href="/api/rest/overview">
     Language-agnostic REST catalog service
   </Card>
   
-  <Card title="Hadoop" icon="folder" href="/catalogs/hadoop">
+  <Card title="Hadoop" icon="folder" href="/catalogs/custom-catalog#hadoop-configuration-access">
     File system-based catalog for development
   </Card>
 </CardGroup>
@@ -128,7 +128,7 @@ When working with encrypted tables, catalogs must:
 - Maintain audit logs for key access
 - Implement proper access controls
 
-See the [Encryption documentation](/security/encryption) for detailed requirements.
+See the [Encryption documentation](/advanced/encryption) for detailed requirements.
 
 ## Next Steps
 
@@ -145,7 +145,7 @@ See the [Encryption documentation](/security/encryption) for detailed requiremen
     Git-like versioning for your data lake
   </Card>
   
-  <Card title="Storage Configuration" icon="hard-drive" href="/storage/overview">
+  <Card title="Storage Configuration" icon="hard-drive" href="/storage/fileio">
     Configure storage backends
   </Card>
 </CardGroup>

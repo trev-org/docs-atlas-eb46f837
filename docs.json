@@ -1,17 +1,24 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "name": "Apache Iceberg",
+  "name": "Apache Iceberg Documentation",
   "theme": "aspen",
   "colors": {
-    "primary": "#d7242a",
-    "light": "#6c6c71",
-    "dark": "#3080be"
+    "primary": "#307FC0",
+    "light": "#307FC0",
+    "dark": "#307FC0"
   },
-  "favicon": "https://media.brand.dev/0fd7fb5c-60ee-44ac-8b05-0c2cafdbfde0.jpg",
-  "logo": {
-    "light": "https://media.brand.dev/831783ec-6b64-4143-b53e-13e8ba05d8c7.png",
-    "dark": "https://media.brand.dev/831783ec-6b64-4143-b53e-13e8ba05d8c7.png"
+  "fonts": {
+    "heading": {
+      "family": "Arimo",
+      "weight": 400
+    },
+    "body": {
+      "family": "Nunito Sans",
+      "weight": 400
+    }
   },
+  "favicon": "/favicon.png",
+  "logo": "/logo/logo.svg",
   "navbar": {
     "primary": {
       "type": "github",
@@ -26,15 +33,15 @@
   "navigation": {
     "tabs": [
       {
+        "tab": "Home",
+        "pages": ["index"]
+      },
+      {
         "tab": "Documentation",
         "groups": [
           {
             "group": "Getting Started",
-            "pages": [
-              "introduction",
-              "quickstart",
-              "java-api-quickstart"
-            ]
+            "pages": ["quickstart", "java-api-quickstart"]
           },
           {
             "group": "Core Concepts",
@@ -92,10 +99,7 @@
           },
           {
             "group": "Advanced Features",
-            "pages": [
-              "advanced/encryption",
-              "advanced/view-configuration"
-            ]
+            "pages": ["advanced/encryption", "advanced/view-configuration"]
           },
           {
             "group": "Migration",
@@ -107,9 +111,7 @@
           },
           {
             "group": "Integrations",
-            "pages": [
-              "integrations/kafka-connect"
-            ]
+            "pages": ["integrations/kafka-connect"]
           }
         ]
       },
@@ -182,11 +184,7 @@
           },
           {
             "group": "Types & Expressions",
-            "pages": [
-              "api/types",
-              "api/expressions",
-              "api/transforms"
-            ]
+            "pages": ["api/types", "api/expressions", "api/transforms"]
           }
         ]
       }
